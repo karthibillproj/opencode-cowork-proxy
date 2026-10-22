@@ -69,6 +69,8 @@ function anthropicHeaders(request: Request, key: string): Record<string, string>
   };
   const beta = request.headers.get("Anthropic-Beta");
   if (beta) headers["Anthropic-Beta"] = beta;
+  const sessionHeader = request.headers.get("x-opencode-session");
+  if (sessionHeader) headers["x-opencode-session"] = sessionHeader;
   return headers;
 }
 
@@ -108,12 +110,17 @@ async function handleRequest(request: Request): Promise<Response> {
           req.model = VISION_MODEL;
         }
         const openaiReq = formatAnthropicToOpenAI(req);
+        const openaiHeaders: Record<string, string> = {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${key}`,
+        };
+        const sessionHeader = request.headers.get("x-opencode-session");
+        if (sessionHeader) {
+          openaiHeaders["x-opencode-session"] = sessionHeader;
+        }
         const res = await fetch(`${upstream}/chat/completions`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${key}`,
-          },
+          headers: openaiHeaders,
           body: JSON.stringify(openaiReq),
         });
         if (!res.ok) return upstreamErrorResponse(res, await res.text());
@@ -166,9 +173,17 @@ async function handleRequest(request: Request): Promise<Response> {
       }
 
       // Pass-through to OpenAI upstream
+      const openaiPassthroughHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`,
+      };
+      const sessionHeaderPassthrough = request.headers.get("x-opencode-session");
+      if (sessionHeaderPassthrough) {
+        openaiPassthroughHeaders["x-opencode-session"] = sessionHeaderPassthrough;
+      }
       const res = await fetch(`${upstream}/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+        headers: openaiPassthroughHeaders,
         body: await request.text(),
       });
       return res;
@@ -180,6 +195,13 @@ async function handleRequest(request: Request): Promise<Response> {
       const err = validateApiKey(key);
       if (err) return authErrorResponse(err);
 
+      const openaiModelsHeaders: Record<string, string> = {
+        "Authorization": `Bearer ${key}`,
+      };
+      const sessionHeaderModels = request.headers.get("x-opencode-session");
+      if (sessionHeaderModels) {
+        openaiModelsHeaders["x-opencode-session"] = sessionHeaderModels;
+      }
       const res = fmt === "anthropic"
         ? await fetch(`${upstream}/v1/models`, {
             method: "GET",
@@ -187,7 +209,7 @@ async function handleRequest(request: Request): Promise<Response> {
           })
         : await fetch(`${upstream}/models`, {
             method: "GET",
-            headers: { "Authorization": `Bearer ${key}` },
+            headers: openaiModelsHeaders,
       });
       if (!res.ok) return upstreamErrorResponse(res, await res.text());
       return new Response(await res.text(), { headers: { "Content-Type": "application/json" } });
