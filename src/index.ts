@@ -106,9 +106,10 @@ async function handleRequest(request: Request): Promise<Response> {
         const req = await request.json();
         const originalModel = req.model;
         if (route.modelOverride) req.model = route.modelOverride;
+        /* commenting for changing model
         if (hasImages(req)) {
           req.model = VISION_MODEL;
-        }
+        } */
         const openaiReq = formatAnthropicToOpenAI(req);
         const openaiHeaders: Record<string, string> = {
           "Content-Type": "application/json",
